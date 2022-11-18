@@ -9,7 +9,10 @@ RUN go mod download
 
 COPY . .
 
+RUN go build -o /menu-api
+
+COPY . .
 
 EXPOSE 8080
 
-CMD [ "menu-api" ]
+CMD [ "/menu-api" ]

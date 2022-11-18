@@ -172,5 +172,5 @@ func SetupAndListen() {
 
 	router.Get("/category/:menu_category_id", getCategory)
 
-	router.Listen(":8000")
+	router.Listen(":8080")
 }
