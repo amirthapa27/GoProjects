@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -191,12 +192,12 @@ func HashPassword(password string) string {
 }
 
 func VerifyPassword(userPassword, providedPassword string) (bool, string) {
-	err := bcrypt.CompareHashAndPassword([]byte(userPassword), []byte(userPassword))
+	err := bcrypt.CompareHashAndPassword([]byte(providedPassword), []byte(userPassword))
 	check := true
 	msg := ""
 	if err != nil {
 		check = false
-		msg = "Email or password is incorrect"
+		msg = fmt.Sprintf("Email or password is incorrect")
 	}
 	return check, msg
 }
