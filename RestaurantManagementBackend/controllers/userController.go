@@ -43,7 +43,7 @@ func GetUsers() gin.HandlerFunc {
 
 		matchStage := bson.D{{"$match", bson.D{{}}}}
 		projectStage := bson.D{
-			{"$projcet", bson.D{
+			{"$project", bson.D{
 				{"_id", 0},
 				{"total_count", 1},
 				{"user_items", bson.D{{"$slice", []interface{}{"$data", startIndex, recordPerPage}}}},
@@ -73,6 +73,7 @@ func GetUser() gin.HandlerFunc {
 		defer cancel()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occured while listing user items"})
+			return
 		}
 		c.JSON(http.StatusOK, user)
 
