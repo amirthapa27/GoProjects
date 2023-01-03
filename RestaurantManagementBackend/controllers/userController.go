@@ -43,6 +43,7 @@ func GetUsers() gin.HandlerFunc {
 		// }
 
 		matchStage := bson.D{{"$match", bson.D{{}}}}
+		groupStage := bson.D{{"$group", bson.D{{"_id", bson.D{{"_id", "null"}}}, {"total_count", bson.D{{"$sum", 1}}}, {"data", bson.D{{"$push", "$$ROOT"}}}}}}
 		projectStage := bson.D{
 			{"$project", bson.D{
 				{"_id", 0},
@@ -51,7 +52,7 @@ func GetUsers() gin.HandlerFunc {
 			}}}
 
 		result, err := userCollection.Aggregate(ctx, mongo.Pipeline{
-			matchStage, projectStage})
+			matchStage, groupStage, projectStage})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occured whle listing users"})
 			return
