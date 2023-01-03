@@ -12,6 +12,7 @@ func Authentication() gin.HandlerFunc {
 		clientToken := c.Request.Header.Get("token")
 		if clientToken == "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "No authrorization provided"})
+			c.Abort()
 			return
 		}
 		claims, err := helpers.ValidateToken(clientToken)

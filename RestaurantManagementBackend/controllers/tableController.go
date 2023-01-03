@@ -15,19 +15,19 @@ import (
 
 func GetTables() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), time.Second*100)
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+
+		result, err := orderCollection.Find(context.TODO(), bson.M{})
 		defer cancel()
-		result, err := tableCollection.Find(context.TODO(), bson.M{})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing the tables"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing table items"})
 			return
 		}
 		var allTables []bson.M
-		if err := result.All(ctx, &allTables); err != nil {
+		if err = result.All(ctx, &allTables); err != nil {
 			log.Fatal(err)
 		}
 		c.JSON(http.StatusOK, allTables)
-
 	}
 }
 
