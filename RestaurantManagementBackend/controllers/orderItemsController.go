@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -15,12 +16,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var orderItemCollection *mongo.Collection = database.OpenCollection(database.Client, "orderItem")
-
 type OrderItemPack struct {
 	Table_id    *string
 	Order_items []models.OrderItem
 }
+
+var orderItemCollection *mongo.Collection = database.OpenCollection(database.Client, "orderItem")
 
 func GetOrderItems() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -58,62 +59,65 @@ func GetOrderItem() gin.HandlerFunc {
 
 func ItemsByOrder(id string) (OrderItems []primitive.M, err error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-	defer cancel()
+
 	matchStage := bson.D{{"$match", bson.D{{"order_id", id}}}}
-	lookUpStage := bson.D{{"$lookup", bson.D{{"from", "food"}, {"localField", "food_id"}, {"foreignField", "fodd_id"}, {"as", "food"}}}}
+	lookupStage := bson.D{{"$lookup", bson.D{{"from", "food"}, {"localField", "food_id"}, {"foreignField", "food_id"}, {"as", "food"}}}}
 	unwindStage := bson.D{{"$unwind", bson.D{{"path", "$food"}, {"preserveNullAndEmptyArrays", true}}}}
 
 	lookupOrderStage := bson.D{{"$lookup", bson.D{{"from", "order"}, {"localField", "order_id"}, {"foreignField", "order_id"}, {"as", "order"}}}}
 	unwindOrderStage := bson.D{{"$unwind", bson.D{{"path", "$order"}, {"preserveNullAndEmptyArrays", true}}}}
 
 	lookupTableStage := bson.D{{"$lookup", bson.D{{"from", "table"}, {"localField", "order.table_id"}, {"foreignField", "table_id"}, {"as", "table"}}}}
-	UnwindTableStage := bson.D{{"$unwind", bson.D{{"path", "$table"}, {"preserveNullAndEmptyArrays", true}}}}
+	unwindTableStage := bson.D{{"$unwind", bson.D{{"path", "$table"}, {"preserveNullAndEmptyArrays", true}}}}
 
-	projectStage1 := bson.D{
+	projectStage := bson.D{
 		{"$project", bson.D{
 			{"id", 0},
 			{"amount", "$food.price"},
 			{"total_count", 1},
 			{"food_name", "$food.name"},
-			{"food_image", "food.food_image"},
+			{"food_image", "$food.food_image"},
 			{"table_number", "$table.table_number"},
 			{"table_id", "$table.table_id"},
 			{"order_id", "$order.order_id"},
 			{"price", "$food.price"},
 			{"quantity", 1},
-		},
-		},
-	}
-	groupStage := bson.D{{"$group", bson.D{{"_id", bson.D{{"order_id", "$order_id"}, {"rable_id", "$table_id"}, {"table_number", "$table_number"}}}, {"payment_due", bson.D{{"$sum", "$amount"}}}, {"total_count", bson.D{{"$sum", 1}}}, {"order_items", bson.D{{"$push", "$$ROOT"}}}}}}
+		}}}
+
+	groupStage := bson.D{{"$group", bson.D{{"_id", bson.D{{"order_id", "$order_id"}, {"table_id", "$table_id"}, {"table_number", "$table_number"}}}, {"payment_due", bson.D{{"$sum", "$amount"}}}, {"total_count", bson.D{{"$sum", 1}}}, {"order_items", bson.D{{"$push", "$$ROOT"}}}}}}
 
 	projectStage2 := bson.D{
 		{"$project", bson.D{
+
 			{"id", 0},
 			{"payment_due", 1},
 			{"total_count", 1},
 			{"table_number", "$_id.table_number"},
 			{"order_items", 1},
-		},
-		},
-	}
+		}}}
+
 	result, err := orderItemCollection.Aggregate(ctx, mongo.Pipeline{
 		matchStage,
-		lookUpStage,
+		lookupStage,
 		unwindStage,
 		lookupOrderStage,
 		unwindOrderStage,
 		lookupTableStage,
-		UnwindTableStage,
-		projectStage1,
+		unwindTableStage,
+		projectStage,
 		groupStage,
-		projectStage2,
-	})
+		projectStage2})
+
 	if err != nil {
 		panic(err)
 	}
-	if err := result.All(ctx, &OrderItems); err != nil {
+
+	if err = result.All(ctx, &OrderItems); err != nil {
 		panic(err)
 	}
+
+	defer cancel()
+
 	return OrderItems, err
 
 }
@@ -135,19 +139,23 @@ func CreateOrderItem() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
-
 		var orderItemPack OrderItemPack
 		var order models.Order
 
 		if err := c.BindJSON(&orderItemPack); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+
+		fmt.Println("before order")
+
 		order.Order_Date, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
+		fmt.Println("after updating order date")
 
 		orderItemsToBeInserted := []interface{}{}
 		order.Table_id = orderItemPack.Table_id
 		order_id := OrderItemOrderCreator(order)
+		fmt.Println("order item order creator")
 
 		for _, orderItem := range orderItemPack.Order_items {
 			orderItem.Order_id = order_id
@@ -162,15 +170,22 @@ func CreateOrderItem() gin.HandlerFunc {
 			orderItem.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 			orderItem.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 			orderItem.Order_item_id = orderItem.ID.Hex()
-
 			var num = toFixed(*orderItem.Unit_price, 2)
 			orderItem.Unit_price = &num
 			orderItemsToBeInserted = append(orderItemsToBeInserted, orderItem)
 		}
+		fmt.Println("order item inserted order creator")
+
 		insertedOrderItems, err := orderItemCollection.InsertMany(ctx, orderItemsToBeInserted)
+
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			return
 		}
+		fmt.Println("order item inserted order ending")
+
+		defer cancel()
+
 		c.JSON(http.StatusOK, insertedOrderItems)
 	}
 }
